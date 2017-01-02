@@ -9,8 +9,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 import cn.cerestech.wechat.bot.BotContext;
-import cn.cerestech.wechat.dataobjects.BatchGetContact;
+import cn.cerestech.wechat.dataobjects.BaseResponse;
+import cn.cerestech.wechat.entity.WcContact;
 import cn.cerestech.wechat.http.HttpClientSSLSession;
+import cn.cerestech.wechat.http.response.BatchGetContactResponse.BatchGetContact;
 import cn.cerestech.wechat.json.Jsons;
 
 public class BatchGetContactResponse extends BotResponse<BatchGetContact> implements PostJson {
@@ -57,4 +59,34 @@ public class BatchGetContactResponse extends BotResponse<BatchGetContact> implem
 		this.userNameList = userNameList;
 	}
 
+	public class BatchGetContact {
+		private BaseResponse BaseResponse;
+		private Integer Count;
+		private List<WcContact> ContactList;
+
+		public BaseResponse getBaseResponse() {
+			return BaseResponse;
+		}
+
+		public void setBaseResponse(BaseResponse baseResponse) {
+			BaseResponse = baseResponse;
+		}
+
+		public Integer getCount() {
+			return Count;
+		}
+
+		public void setCount(Integer count) {
+			Count = count;
+		}
+
+		public List<WcContact> getContactList() {
+			return ContactList;
+		}
+
+		public void setContactList(List<WcContact> contactList) {
+			ContactList = contactList;
+		}
+
+	}
 }

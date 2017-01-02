@@ -1,21 +1,28 @@
 package cn.cerestech.wechat.bot;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.io.Files;
 
+import cn.cerestech.wechat.Encrypts;
 import cn.cerestech.wechat.bot.entity.Contact;
 import cn.cerestech.wechat.bot.enums.ContactType;
 import cn.cerestech.wechat.bot.enums.Sex;
 import cn.cerestech.wechat.dataobjects.AddMsg;
-import cn.cerestech.wechat.dataobjects.BatchGetContact;
 import cn.cerestech.wechat.entity.WcContact;
 import cn.cerestech.wechat.enums.BotState;
 import cn.cerestech.wechat.http.HttpClientSSLSession;
 import cn.cerestech.wechat.http.response.BatchGetContactResponse;
+import cn.cerestech.wechat.http.response.BatchGetContactResponse.BatchGetContact;
 import cn.cerestech.wechat.http.response.CheckMsgResponse;
 import cn.cerestech.wechat.http.response.GetContactResponse;
 import cn.cerestech.wechat.http.response.LoginInitResponse;
@@ -23,11 +30,14 @@ import cn.cerestech.wechat.http.response.NewMsgResponse;
 import cn.cerestech.wechat.http.response.PassTicketResponse;
 import cn.cerestech.wechat.http.response.QrCodeResponse;
 import cn.cerestech.wechat.http.response.ScanListenResponse;
-import cn.cerestech.wechat.http.response.SendMsgResposne;
+import cn.cerestech.wechat.http.response.SendTextMsgResponse;
+import cn.cerestech.wechat.http.response.SendVideoMsgResponse;
+import cn.cerestech.wechat.http.response.UploadMediaResponse;
 import cn.cerestech.wechat.http.response.UuidResponse;
 import cn.cerestech.wechat.json.Jsons;
 import cn.cerestech.wechat.msg.Msg;
 import cn.cerestech.wechat.msg.MsgFactory;
+import cn.cerestech.wechat.util.ByteArraySplitter;
 import cn.cerestech.wechat.util.StringArraySplitter;
 
 public abstract class Bot extends HttpClientSSLSession implements Runnable {
@@ -190,9 +200,21 @@ public abstract class Bot extends HttpClientSSLSession implements Runnable {
 	 * 
 	 * @param text
 	 */
-	protected SendMsgResposne sendTextMsg(String toWhom, String text) {
+	protected SendTextMsgResponse sendText(String toWhom, String text) {
 		Msg msg = MsgFactory.on(context).to(toWhom).text(text).build();
-		return post(new SendMsgResposne(context, msg));
+		return post(new SendTextMsgResponse(context, msg));
+	}
+
+	protected SendVideoMsgResponse sendVideo(String toWhom, File file) {
+		UploadMediaResponse mediaResponse = uploadMedia(toWhom, file);
+		String mediaId = mediaResponse.getOriginal().getMediaId();
+		if (!Strings.isNullOrEmpty(mediaId)) {
+			Msg msg = MsgFactory.on(context).to(toWhom).video(mediaId).build();
+			return post(new SendVideoMsgResponse(context, msg));
+		} else {
+			return null;
+		}
+
 	}
 
 	// 更新联系人列表
@@ -263,82 +285,72 @@ public abstract class Bot extends HttpClientSSLSession implements Runnable {
 		return contact;
 	}
 
-	//
-	// protected UploadMediaResponse uploadMedia(String toWhom, File file) {
-	//
-	// String filename = Files.getNameWithoutExtension(file.getAbsolutePath());
-	// String ext = Files.getFileExtension(file.getAbsolutePath());
-	// if (!Strings.isNullOrEmpty(ext)) {
-	// filename = filename + "." + ext;
-	// }
-	//
-	// byte[] bytes = new byte[0];
-	// try {
-	// bytes = Files.toByteArray(file);
-	// } catch (IOException e) {
-	// e.printStackTrace();
-	// }
-	// int size = bytes.length;
-	// String md5 = Encrypts.md5(bytes);
-	//
-	// Map<String, String> textPart = Maps.newHashMap();
-	//
-	// textPart.put("id", "WU_FILE_0");
-	// textPart.put("name", filename);
-	// textPart.put("type", "video/mp4");
-	// textPart.put("lastModifiedDate", new
-	// Date(file.lastModified()).toGMTString());
-	// textPart.put("size", bytes.length + "");
-	//
-	// textPart.put("mediatype", "video");
-	// textPart.put("uploadmediarequest", new Supplier<String>() {
-	//
-	// @Override
-	// public String get() {
-	// Long ClientMediaId = System.currentTimeMillis();
-	//
-	// Map<String, Object> request = Maps.newHashMap();
-	// request.put("UploadType", 2);
-	// request.put("BaseRequest", context.initBaseRequest());
-	// request.put("ClientMediaId", ClientMediaId);
-	// request.put("TotalLen", size);
-	// request.put("StartPos", 0);
-	// request.put("DataLen", size);
-	// request.put("MediaType", 4);
-	// request.put("FromUserName", context.getCurrentUser().getUserName());
-	// request.put("ToUserName", toWhom);
-	// request.put("FileMd5", md5);
-	// return Jsons.from(request).toJson();
-	// }
-	// }.get());
-	// String webwxDataTicket = cookieStore.get("webwx_data_ticket").getValue();
-	// textPart.put("webwx_data_ticket", webwxDataTicket);
-	// textPart.put("pass_ticket", context.getPassTicket());
-	//
-	// // 分拆成多个部分上传
-	// CloseableHttpResponse response = null;
-	// int WX_UPLOAD_BLOCK_SIZE = 524288;
-	// byte[][] buf = ByteArraySplitter.on(WX_UPLOAD_BLOCK_SIZE).split(bytes);
-	// for (int i = 0; i < buf.length; i++) {
-	// byte[] part = buf[i];
-	// textPart.put("chunks", buf.length + "");
-	// textPart.put("chunk", i + "");
-	// logger.trace("开始上传文件[" + filename + "]：总 " + buf.length + " 第 " + i + "
-	// Size " + part.length);
-	// response = uploadFile(WeChatUrl.uploadMedia(), null, textPart, filename,
-	// part);
-	// }
-	//
-	// if (response == null) {
-	// return null;
-	// } else {
-	// String json = toString(response);
-	// logger.trace("UploadMedia Response: " + json);
-	// UploadMediaResponse resp =
-	// Jsons.from(json).to(UploadMediaResponse.class);
-	// return resp;
-	// }
-	// }
+	@SuppressWarnings("deprecation")
+	protected UploadMediaResponse uploadMedia(String toWhom, File file) {
+
+		String filename = Files.getNameWithoutExtension(file.getAbsolutePath());
+		String ext = Files.getFileExtension(file.getAbsolutePath());
+		if (!Strings.isNullOrEmpty(ext)) {
+			filename = filename + "." + ext;
+		}
+
+		byte[] bytes = new byte[0];
+		try {
+			bytes = Files.toByteArray(file);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+
+		int size = bytes.length;
+		String md5 = Encrypts.md5(bytes);
+
+		Map<String, String> textPart = Maps.newHashMap();
+
+		textPart.put("id", "WU_FILE_0");
+		textPart.put("name", filename);
+		textPart.put("type", "video/mp4");
+		textPart.put("lastModifiedDate", new Date(file.lastModified()).toGMTString());
+		textPart.put("size", bytes.length + "");
+
+		textPart.put("mediatype", "video");
+		textPart.put("uploadmediarequest", new Supplier<String>() {
+
+			@Override
+			public String get() {
+				Long ClientMediaId = System.currentTimeMillis();
+
+				Map<String, Object> request = Maps.newHashMap();
+				request.put("UploadType", 2);
+				request.put("BaseRequest", context.initBaseRequest());
+				request.put("ClientMediaId", ClientMediaId);
+				request.put("TotalLen", size);
+				request.put("StartPos", 0);
+				request.put("DataLen", size);
+				request.put("MediaType", 4);
+				request.put("FromUserName", context.getCurrentUser().getUserName());
+				request.put("ToUserName", toWhom);
+				request.put("FileMd5", md5);
+				return Jsons.from(request).toJson();
+			}
+		}.get());
+		String webwxDataTicket = cookieStore.get("webwx_data_ticket").getValue();
+		textPart.put("webwx_data_ticket", webwxDataTicket);
+		textPart.put("pass_ticket", context.getPassTicket());
+
+		// 分拆成多个部分上传
+		UploadMediaResponse response = null;
+		int WX_UPLOAD_BLOCK_SIZE = 524288;
+		byte[][] buf = ByteArraySplitter.on(WX_UPLOAD_BLOCK_SIZE).split(bytes);
+		for (int i = 0; i < buf.length; i++) {
+			byte[] part = buf[i];
+			textPart.put("chunks", buf.length + "");
+			textPart.put("chunk", i + "");
+			logger.trace("开始上传文件[" + filename + "]：总 " + buf.length + " 第 " + i + " Size " + part.length);
+			response = uploadMediaPart(new UploadMediaResponse(context, textPart, filename, part));
+		}
+
+		return response;
+	}
 	//
 	// protected SendMsgResposne sendVideoMsg(String toWhom, String mediaId) {
 	// Msg videoMsg = MsgFactory.on(context).to(toWhom).video(mediaId).build();

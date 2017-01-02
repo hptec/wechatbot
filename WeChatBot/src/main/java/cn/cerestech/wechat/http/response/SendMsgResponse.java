@@ -3,15 +3,16 @@ package cn.cerestech.wechat.http.response;
 import org.apache.http.client.methods.CloseableHttpResponse;
 
 import cn.cerestech.wechat.bot.BotContext;
-import cn.cerestech.wechat.dataobjects.SendMsg;
+import cn.cerestech.wechat.dataobjects.BaseResponse;
 import cn.cerestech.wechat.http.HttpClientSSLSession;
+import cn.cerestech.wechat.http.response.SendMsgResponse.SendMsg;
 import cn.cerestech.wechat.json.Jsons;
 import cn.cerestech.wechat.msg.Msg;
 
-public class SendMsgResposne extends BotResponse<SendMsg> implements PostJson {
+public class SendMsgResponse extends BotResponse<SendMsg> implements PostJson {
 	private Msg msg;
 
-	public SendMsgResposne(BotContext context, Msg msg) {
+	public SendMsgResponse(BotContext context, Msg msg) {
 		super(context);
 		this.msg = msg;
 		setRequest(new BotRequest(context, () -> "https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxsendmsg?lang="
@@ -39,4 +40,34 @@ public class SendMsgResposne extends BotResponse<SendMsg> implements PostJson {
 		this.msg = msg;
 	}
 
+	public class SendMsg {
+		private BaseResponse BaseResponse;
+		private String LocalID;
+		private String MsgID;
+
+		public BaseResponse getBaseResponse() {
+			return BaseResponse;
+		}
+
+		public void setBaseResponse(BaseResponse baseResponse) {
+			BaseResponse = baseResponse;
+		}
+
+		public String getLocalID() {
+			return LocalID;
+		}
+
+		public void setLocalID(String localID) {
+			LocalID = localID;
+		}
+
+		public String getMsgID() {
+			return MsgID;
+		}
+
+		public void setMsgID(String msgID) {
+			MsgID = msgID;
+		}
+
+	}
 }

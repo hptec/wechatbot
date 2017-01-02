@@ -1,14 +1,12 @@
 package cn.cerestech.wechat.http;
 
 import java.io.IOException;
-import java.net.URI;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.List;
-import java.util.Map;
 
 import javax.net.ssl.SSLContext;
 
@@ -35,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import cn.cerestech.wechat.http.response.BotRequest;
 import cn.cerestech.wechat.http.response.BotResponse;
 import cn.cerestech.wechat.http.response.PostJson;
+import cn.cerestech.wechat.http.response.UploadMediaResponse;
 
 public abstract class HttpClientSSLSession {
 
@@ -80,7 +79,7 @@ public abstract class HttpClientSSLSession {
 		try {
 			CloseableHttpResponse response = getHttpClient().execute(get);
 			long time = System.currentTimeMillis() - start;
-			long stamp=System.currentTimeMillis();
+			long stamp = System.currentTimeMillis();
 			cookieStore.refresh(response.getHeaders("Set-Cookie"));
 			request.parse(response);
 			long parse = System.currentTimeMillis() - stamp;
@@ -119,7 +118,7 @@ public abstract class HttpClientSSLSession {
 		try {
 			CloseableHttpResponse response = getHttpClient().execute(post);
 			long time = System.currentTimeMillis() - start;
-			long stamp=System.currentTimeMillis();
+			long stamp = System.currentTimeMillis();
 			cookieStore.refresh(response.getHeaders("Set-Cookie"));
 			request.parse(response);
 			long parse = System.currentTimeMillis() - stamp;
@@ -132,39 +131,49 @@ public abstract class HttpClientSSLSession {
 
 	}
 
-	public CloseableHttpResponse uploadFile(String url, Headers headers, Map<String, String> textPart,
-			String filenameOnly, byte[] buf) {
-		HttpPost post = new HttpPost(url);
+	protected UploadMediaResponse uploadMediaPart(UploadMediaResponse request) {
+		long start = System.currentTimeMillis();
+
+		HttpPost post = new HttpPost();
 
 		// 合并header
-		Headers headersTo = new Headers();
-		if (headers != null) {
-			headersTo.addAll(headers);
+		Headers headersTo = request.getRequest().getExternalHeaders();
+
+		// 合并cookie
+		List<Cookie> externalCookies = request.getRequest().getExternalCookies();
+		if (externalCookies != null) {
+			externalCookies.forEach(c -> cookieStore.addCookie(c));
 		}
 		for (Header h : headersTo) {
 			post.addHeader(h);
 		}
 		post.addHeader(cookieStore.toRequestHeader());
 
+		post.setURI(request.getRequest().getUrl());
+
 		MultipartEntityBuilder builder = MultipartEntityBuilder.create();
 		builder.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
-		textPart.forEach((k, v) -> {
+		request.getTextPart().forEach((k, v) -> {
 			builder.addTextBody(k, v);
 		});
 
-		builder.addBinaryBody("filename", buf, ContentType.DEFAULT_BINARY, filenameOnly);
+		builder.addBinaryBody("filename", request.getBytes(), ContentType.DEFAULT_BINARY, request.getFilename());
 		HttpEntity entity = builder.build();
 		post.setEntity(entity);
 
 		try {
-			post.setURI(new URI(url));
 			CloseableHttpResponse response = getHttpClient().execute(post);
+			long time = System.currentTimeMillis() - start;
+			long stamp = System.currentTimeMillis();
 			cookieStore.refresh(response.getHeaders("Set-Cookie"));
-			return response;
+			request.parse(response);
+			long parse = System.currentTimeMillis() - stamp;
+			logger.trace("UPLOAD PART " + request.getClass().getSimpleName() + " time: " + time + "(ms) Parse: " + parse
+					+ "(ms)");
+			return request;
 		} catch (Throwable e) {
-			e.printStackTrace();
+			throw new RuntimeException(e);
 		}
-		return null;
 	}
 
 	/**
